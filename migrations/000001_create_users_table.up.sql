@@ -1,0 +1,13 @@
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at DATETIME DEFAULT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    reset_token VARCHAR(255) DEFAULT NULL,
+    reset_expires DATETIME DEFAULT NULL
+);
+
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_users_deleted_at ON users(deleted_at);
