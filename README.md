@@ -2,7 +2,6 @@
 
 Transform your links into powerful insights. Track, analyze, and optimize your customer engagement with our advanced URL shortening and QR code generation solution.
 
-![Lynx Screenshot](path/to/your/screenshot.png)
 
 ## 🌟 Features
 
