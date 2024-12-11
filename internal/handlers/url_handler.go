@@ -18,13 +18,15 @@ type URLHandler struct {
 	baseURL    string
 }
 
+// Constructor function for initializing URLHandler
 func NewURLHandler(urlService interfaces.URLService, baseURL string) *URLHandler {
 	return &URLHandler{
 		urlService: urlService,
-		baseURL:    strings.TrimSuffix(baseURL, "/"),
+		baseURL:    strings.TrimSuffix(baseURL, "/"), // Removes trailing slash
 	}
 }
 
+// CreateShortURL creates a short URL for a given long URL
 func (h *URLHandler) CreateShortURL(c *gin.Context) {
 	var req models.CreateURLRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -48,6 +50,7 @@ func (h *URLHandler) CreateShortURL(c *gin.Context) {
 	utils.SuccessResponse(c, http.StatusCreated, "Short URL created successfully", url)
 }
 
+// GetUserURLs retrieves paginated short URLs created by the user
 func (h *URLHandler) GetUserURLs(c *gin.Context) {
 	var pagination utils.PaginationRequest
 	if err := c.ShouldBindQuery(&pagination); err != nil {
@@ -77,12 +80,10 @@ func (h *URLHandler) GetUserURLs(c *gin.Context) {
 
 	urlResponses := make([]types.URLResponse, len(urls))
 	for i, url := range urls {
-		// stats, _ := h.urlService.GetURLStats(ctx, url.ID)
 		shortCode := strings.TrimPrefix(url.ShortURL, h.baseURL+"/urls/")
 
 		urlResponses[i] = types.URLResponse{
 			URL: &url,
-			// Stats: stats,
 			QRCodes: types.QRCodeURLs{
 				PNG:    fmt.Sprintf("%s/qr/%s", h.baseURL, shortCode),
 				Base64: fmt.Sprintf("%s/qr/%s/base64", h.baseURL, shortCode),
@@ -99,6 +100,7 @@ func (h *URLHandler) GetUserURLs(c *gin.Context) {
 	})
 }
 
+// GetURL fetches details of a specific short URL
 func (h *URLHandler) GetURL(c *gin.Context) {
 	urlID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -119,12 +121,10 @@ func (h *URLHandler) GetURL(c *gin.Context) {
 		return
 	}
 
-	// stats, _ := h.urlService.GetURLStats(ctx, urlID)
 	shortCode := strings.TrimPrefix(url.ShortURL, h.baseURL+"/urls/")
 
 	response := types.URLResponse{
 		URL: url,
-		// Stats: stats,
 		QRCodes: types.QRCodeURLs{
 			PNG:    fmt.Sprintf("%s/qr/%s", h.baseURL, shortCode),
 			Base64: fmt.Sprintf("%s/qr/%s/base64", h.baseURL, shortCode),
@@ -134,6 +134,7 @@ func (h *URLHandler) GetURL(c *gin.Context) {
 	utils.SuccessResponse(c, http.StatusOK, "URL retrieved successfully", response)
 }
 
+// DeleteURL deletes a specific short URL
 func (h *URLHandler) DeleteURL(c *gin.Context) {
 	urlID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -156,6 +157,7 @@ func (h *URLHandler) DeleteURL(c *gin.Context) {
 	utils.SuccessResponse(c, http.StatusOK, "URL deleted successfully", nil)
 }
 
+// RedirectToLongURL redirects a short URL to the original long URL
 func (h *URLHandler) RedirectToLongURL(c *gin.Context) {
 	shortCode := c.Param("shortCode")
 	if shortCode == "" {
@@ -177,7 +179,6 @@ func (h *URLHandler) RedirectToLongURL(c *gin.Context) {
 		return
 	}
 
-	// Log redirection
 	utils.Logger.Info("Redirecting to URL",
 		"short_code", shortCode,
 		"long_url", longURL,
@@ -187,20 +188,3 @@ func (h *URLHandler) RedirectToLongURL(c *gin.Context) {
 
 	c.Redirect(http.StatusMovedPermanently, longURL)
 }
-
-// func (h *URLHandler) GetURLStats(c *gin.Context) {
-//     urlID, err := uuid.Parse(c.Param("id"))
-//     if err != nil {
-//         utils.ErrorResponse(c, http.StatusBadRequest, types.ErrInvalidUUID)
-//         return
-//     }
-
-//     ctx := c.Request.Context()
-//     // stats, err := h.urlService.GetURLStats(ctx, urlID)
-//     if err != nil {
-//         utils.HandleError(c, err)
-//         return
-//     }
-
-//     utils.SuccessResponse(c, http.StatusOK, "URL statistics retrieved successfully", stats)
-// }
