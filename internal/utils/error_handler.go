@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/naufalrafianto/lynx-api/internal/types"
+	"github.com/marcelaritonang/website-urlshortener-lynx-backend/internal/types"
 )
 
 func HandleError(c *gin.Context, err error) {

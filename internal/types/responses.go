@@ -1,7 +1,7 @@
 package types
 
 import (
-	"github.com/naufalrafianto/lynx-api/internal/models"
+	"github.com/marcelaritonang/website-urlshortener-lynx-backend/internal/models"
 )
 
 type RegisterResponse struct {
@@ -22,7 +22,6 @@ type MessageResponse struct {
 
 type URLResponse struct {
 	URL     *models.URL `json:"url"`
-	Stats   *URLStats   `json:"stats,omitempty"`
 	QRCodes QRCodeURLs  `json:"qr_codes"`
 }
 

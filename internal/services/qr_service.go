@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/naufalrafianto/lynx-api/internal/utils"
+	"github.com/marcelaritonang/website-urlshortener-lynx-backend/internal/utils"
 	"github.com/skip2/go-qrcode"
 	"gorm.io/gorm"
 )

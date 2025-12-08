@@ -14,14 +14,17 @@ import (
 )
 
 type User struct {
-	ID        uuid.UUID `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
-	Email     string    `json:"email" gorm:"uniqueIndex;not null"`
-	Password  string    `json:"-" gorm:"not null"`
-	FirstName string    `json:"first_name"`
-	LastName  string    `json:"last_name"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	URLs      []URL     `json:"urls,omitempty" gorm:"foreignKey:UserID"`
+	ID               uuid.UUID      `gorm:"type:uuid;primary_key" json:"id"`
+	Email            string         `gorm:"uniqueIndex;not null" json:"email"`
+	Password         string         `gorm:"not null" json:"-"`
+	FirstName        string         `gorm:"not null" json:"first_name"`
+	LastName         string         `gorm:"not null" json:"last_name"`
+	CreatedAt        time.Time      `json:"created_at"`
+	UpdatedAt        time.Time      `json:"updated_at"`
+	DeletedAt        gorm.DeletedAt `gorm:"index" json:"-"`
+	ResetToken       *string        `gorm:"index" json:"-"`
+	ResetTokenExpiry *time.Time     `json:"-"`
+	URLs             []URL          `json:"urls,omitempty" gorm:"foreignKey:UserID"`
 }
 
 func (u *User) BeforeCreate(tx *gorm.DB) error {
@@ -74,11 +77,11 @@ func (r *RegisterRequest) Validate() error {
 }
 
 const (
-	Argon2Time      uint32 = 1
-	Argon2Memory    uint32 = 64 * 1024
-	Argon2Threads   uint8  = 4
-	Argon2KeyLength uint32 = 32
-	SaltLength      int    = 16
+	Argon2Time      uint32 = 1         // Iterations
+	Argon2Memory    uint32 = 64 * 1024 // 64MB RAM
+	Argon2Threads   uint8  = 4         // Parallel threads
+	Argon2KeyLength uint32 = 32        // Hash length
+	SaltLength      int    = 16        // Random salt length
 )
 
 func generateSalt() (string, error) {
@@ -90,17 +93,28 @@ func generateSalt() (string, error) {
 }
 
 func (u *User) HashPassword() error {
-	// Generate a random salt
+	// 1️⃣ Generate random salt (16 bytes)
 	salt, err := generateSalt()
 	if err != nil {
 		return err
 	}
 
-	// Generate Argon2 hash
-	hash := argon2.IDKey([]byte(u.Password), []byte(salt), Argon2Time, Argon2Memory, Argon2Threads, Argon2KeyLength)
+	// 2️⃣ Generate Argon2 hash
+	// Argon2(password, salt, time, memory, threads, keyLength)
+	hash := argon2.IDKey(
+		[]byte(u.Password),
+		[]byte(salt),
+		Argon2Time,
+		Argon2Memory,
+		Argon2Threads,
+		Argon2KeyLength,
+	)
 
-	// Combine salt and hash for storage
-	u.Password = fmt.Sprintf("%s$%s", salt, base64.RawStdEncoding.EncodeToString(hash))
+	// 3️⃣ Store: salt$hash
+	u.Password = fmt.Sprintf("%s$%s",
+		salt,
+		base64.RawStdEncoding.EncodeToString(hash),
+	)
 	return nil
 }
 
@@ -160,4 +174,33 @@ func isValidPassword(password string) bool {
 	hasSpecial := regexp.MustCompile(`[!@#$%^&*(),.?":{}|<>]`).MatchString(password)
 
 	return hasUpper && hasLower && hasNumber && hasSpecial
+}
+
+// GenerateResetToken creates a secure random token for password reset
+func (u *User) GenerateResetToken() (string, error) {
+	tokenBytes := make([]byte, 32)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		return "", err
+	}
+	token := base64.URLEncoding.EncodeToString(tokenBytes)
+
+	expiry := time.Now().Add(1 * time.Hour)
+	u.ResetToken = &token
+	u.ResetTokenExpiry = &expiry
+
+	return token, nil
+}
+
+// IsResetTokenValid checks if the reset token is valid and not expired
+func (u *User) IsResetTokenValid() bool {
+	if u.ResetToken == nil || u.ResetTokenExpiry == nil {
+		return false
+	}
+	return time.Now().Before(*u.ResetTokenExpiry)
+}
+
+// ClearResetToken removes the reset token after use
+func (u *User) ClearResetToken() {
+	u.ResetToken = nil
+	u.ResetTokenExpiry = nil
 }

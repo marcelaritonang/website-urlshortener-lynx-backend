@@ -1,3 +1,4 @@
+# Gunakan versi Go terbaru atau install air versi yang kompatibel
 FROM golang:1.23-alpine AS base
 
 # Add essential build tools
@@ -12,8 +13,8 @@ RUN go mod download
 # Development stage
 FROM base AS development
 
-# Install Air for hot reload
-RUN go install github.com/air-verse/air@latest
+# Install Air versi yang kompatibel dengan Go 1.23
+RUN go install github.com/air-verse/air@v1.52.3
 
 # Copy the entire project
 COPY . .

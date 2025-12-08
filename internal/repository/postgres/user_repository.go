@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/naufalrafianto/lynx-api/internal/models"
+	"github.com/marcelaritonang/website-urlshortener-lynx-backend/internal/models"
 	"gorm.io/gorm"
 )
 
