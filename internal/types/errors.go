@@ -36,12 +36,14 @@ var (
 
 // User related errors
 var (
-	ErrUserExists         = errors.New("user already exists")
-	ErrUserNotFound       = errors.New("user not found")
-	ErrInvalidCredentials = errors.New("invalid credentials")
-	ErrInvalidToken       = errors.New("invalid token")
-	ErrTokenExpired       = errors.New("token has expired")
-	ErrPasswordMismatch   = errors.New("password does not match")
+	ErrUserExists                 = errors.New("user already exists")
+	ErrUserNotFound               = errors.New("user not found")
+	ErrInvalidCredentials         = errors.New("invalid credentials")
+	ErrInvalidToken               = errors.New("invalid token")
+	ErrTokenExpired               = errors.New("token has expired")
+	ErrPasswordMismatch           = errors.New("password does not match")
+	ErrInvalidOrExpiredResetToken = errors.New("invalid or expired reset token")
+	ErrResetTokenHasExpired       = errors.New("reset token has expired")
 )
 
 // Generic errors

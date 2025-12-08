@@ -1,4 +1,4 @@
-module github.com/naufalrafianto/lynx-api
+module github.com/marcelaritonang/website-urlshortener-lynx-backend
 
 go 1.23.3
 

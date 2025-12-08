@@ -7,8 +7,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/google/uuid"
-	"github.com/naufalrafianto/lynx-api/internal/types"
-	"github.com/naufalrafianto/lynx-api/internal/utils"
+	"github.com/marcelaritonang/website-urlshortener-lynx-backend/internal/types"
+	"github.com/marcelaritonang/website-urlshortener-lynx-backend/internal/utils"
 )
 
 func AuthMiddleware(jwtSecret string) gin.HandlerFunc {

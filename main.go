@@ -13,13 +13,13 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
-	"github.com/naufalrafianto/lynx-api/internal/config"
-	"github.com/naufalrafianto/lynx-api/internal/handlers"
-	"github.com/naufalrafianto/lynx-api/internal/interfaces"
-	"github.com/naufalrafianto/lynx-api/internal/middleware"
-	"github.com/naufalrafianto/lynx-api/internal/models"
-	"github.com/naufalrafianto/lynx-api/internal/services"
-	"github.com/naufalrafianto/lynx-api/internal/utils"
+	"github.com/marcelaritonang/website-urlshortener-lynx-backend/internal/config"
+	"github.com/marcelaritonang/website-urlshortener-lynx-backend/internal/handlers"
+	"github.com/marcelaritonang/website-urlshortener-lynx-backend/internal/interfaces"
+	"github.com/marcelaritonang/website-urlshortener-lynx-backend/internal/middleware"
+	"github.com/marcelaritonang/website-urlshortener-lynx-backend/internal/models"
+	"github.com/marcelaritonang/website-urlshortener-lynx-backend/internal/services"
+	"github.com/marcelaritonang/website-urlshortener-lynx-backend/internal/utils"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -48,8 +48,11 @@ func (a *App) Initialize() error {
 	}
 	a.config = cfg
 
-	// Initialize logger
+	// ✅ FIX: Initialize logger FIRST (before using utils.Logger)
 	utils.InitLogger(cfg.AppEnv)
+
+	// ✅ NOW safe to use utils.Logger
+	utils.Logger.Info("JWT Secret validated", "length", len(cfg.JWTSecret))
 
 	// Initialize database
 	db, err := a.initDatabase()
@@ -72,6 +75,10 @@ func (a *App) Initialize() error {
 
 	// Setup router
 	a.router = a.setupRouter()
+
+	// ✅ NEW: Start cache warming service
+	cacheWarmer := services.NewCacheWarmer(a.db, a.redis)
+	cacheWarmer.StartCacheWarmer()
 
 	return nil
 }
@@ -126,41 +133,67 @@ func (a *App) setupRouter() *gin.Engine {
 	router.Use(utils.NewLoggerMiddleware(utils.Logger).Handle())
 	router.Use(cors.New(a.corsConfig()))
 
+	// ✅ NEW: Global rate limiting (100 requests/min per IP)
+	router.Use(middleware.RateLimiterMiddleware(a.redis, middleware.RateLimiterConfig{
+		RequestsPerMinute: 100,
+		BurstSize:         20,
+		BlockDuration:     30 * time.Minute,
+	}))
+
 	// Determine base URL
 	baseURL := fmt.Sprintf("http://%s:%s", a.config.Host, a.config.Port)
 	if a.config.AppEnv == "production" && a.config.BaseURL != "" {
 		baseURL = a.config.BaseURL
 	}
 
-	// Initialize services with interfaces
+	// ✅ Initialize services with interfaces
 	var authService interfaces.AuthService = services.NewAuthService(a.db, a.redis)
 	var urlService interfaces.URLService = services.NewURLService(a.db, a.redis, a.config.URLPrefix)
 	var qrService interfaces.QRService = services.NewQRService(a.db, a.redis, baseURL)
 
-	// Initialize handlers
-	authHandler := handlers.NewAuthHandler(authService, a.config.JWTSecret)
+	// ✅ Initialize handlers
+	authHandler := handlers.NewAuthHandler(authService, a.config.JWTSecret, a.db)
 	urlHandler := handlers.NewURLHandler(urlService, baseURL)
 	qrHandler := handlers.NewQRHandler(qrService, urlService)
 
 	// Health check
 	router.GET("/health", a.healthCheck())
 
-	// Public routes
+	// Public routes (no authentication)
 	router.GET("/qr/:shortCode", qrHandler.GetQRCode)
 	router.GET("/qr/:shortCode/base64", qrHandler.GetQRCodeBase64)
-	router.GET("/urls/:shortCode", urlHandler.RedirectToLongURL)
+	router.GET("/urls/:shortCode", urlHandler.RedirectToLongURL) // ✅ Critical route
 
-	// API routes
+	fmt.Println("✅ [ROUTER] Redirect route registered: GET /urls/:shortCode")
+
+	// ✅ ADD: Debug log for route registration
+	fmt.Println("🔧 [ROUTER] Registering public routes...")
+
+	// Public API routes (no authentication required)
+	publicAPI := router.Group("/api")
+	{
+		publicAPI.POST("/urls", urlHandler.CreateAnonymousURL)
+	}
+
+	// API v1 routes
 	v1 := router.Group("/v1")
 	{
-		// Auth routes
+		// ✅ Auth routes (public) - WITH STRICT RATE LIMITING
 		auth := v1.Group("/auth")
+		auth.Use(middleware.AuthRateLimiterMiddleware(a.redis)) // 5 attempts per 15 min
 		{
 			auth.POST("/register", authHandler.Register)
 			auth.POST("/login", authHandler.Login)
+
+			// ✅ Forgot password with additional email-based rate limit
+			auth.POST("/forgot-password",
+				middleware.ForgotPasswordRateLimiter(a.redis),
+				authHandler.ForgotPassword)
+
+			auth.POST("/reset-password", authHandler.ResetPasswordConfirm)
 		}
 
-		// Protected routes
+		// Protected routes (authentication required)
 		api := v1.Group("/api")
 		api.Use(middleware.AuthMiddleware(a.config.JWTSecret))
 		{
@@ -171,7 +204,7 @@ func (a *App) setupRouter() *gin.Engine {
 				user.POST("/logout", authHandler.Logout)
 			}
 
-			// URL routes
+			// URL routes (authenticated users only)
 			urls := api.Group("/urls")
 			{
 				urls.POST("", urlHandler.CreateShortURL)
@@ -186,6 +219,7 @@ func (a *App) setupRouter() *gin.Engine {
 
 	return router
 }
+
 func (a *App) corsConfig() cors.Config {
 	return cors.Config{
 		AllowOrigins:     []string{"*"},
@@ -212,8 +246,18 @@ func (a *App) notFound() gin.HandlerFunc {
 }
 
 func (a *App) initDatabase() (*gorm.DB, error) {
+	fmt.Println("=== DATABASE CONNECTION DEBUG ===")
+	fmt.Println("DBHost:", a.config.DBHost)
+	fmt.Println("DBPort:", a.config.DBPort)
+	fmt.Println("DBUser:", a.config.DBUser)
+	fmt.Println("DBPassword:", a.config.DBPassword)
+	fmt.Println("DBName:", a.config.DBName)
+
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable TimeZone=UTC",
 		a.config.DBHost, a.config.DBUser, a.config.DBPassword, a.config.DBName, a.config.DBPort)
+
+	fmt.Println("DSN:", dsn)
+	fmt.Println("================================")
 
 	gormConfig := &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Info),
@@ -237,19 +281,40 @@ func (a *App) initRedis() (*redis.Client, error) {
 		DialTimeout:  5 * time.Second,
 		ReadTimeout:  3 * time.Second,
 		WriteTimeout: 3 * time.Second,
+		PoolSize:     10, // ✅ ADD: Connection pool
+		MinIdleConns: 5,  // ✅ ADD: Minimum idle connections
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	// ✅ Test connection
 	if err := redisClient.Ping(ctx).Err(); err != nil {
 		return nil, fmt.Errorf("redis connection failed: %w", err)
 	}
+
+	// ✅ Test write operation
+	testKey := "test:connection"
+	if err := redisClient.Set(ctx, testKey, "ok", 10*time.Second).Err(); err != nil {
+		return nil, fmt.Errorf("redis write test failed: %w", err)
+	}
+
+	// ✅ Test read operation
+	if val, err := redisClient.Get(ctx, testKey).Result(); err != nil || val != "ok" {
+		return nil, fmt.Errorf("redis read test failed")
+	}
+
+	// Cleanup test key
+	redisClient.Del(ctx, testKey)
+
+	fmt.Println("✅ Redis connection tested successfully")
 
 	return redisClient, nil
 }
 
 func (a *App) initMigrations() error {
+	// ✅ REMOVED: Auto drop table - data will persist
+	// Only run AutoMigrate to update schema without dropping tables
 	return a.db.AutoMigrate(
 		&models.User{},
 		&models.URL{},

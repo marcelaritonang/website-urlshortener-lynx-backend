@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/naufalrafianto/lynx-api/internal/pkg/logger"
+	"github.com/marcelaritonang/website-urlshortener-lynx-backend/internal/pkg/logger"
 )
 
 func LoggerMiddleware() gin.HandlerFunc {

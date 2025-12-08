@@ -5,9 +5,9 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/naufalrafianto/lynx-api/internal/interfaces"
-	"github.com/naufalrafianto/lynx-api/internal/types"
-	"github.com/naufalrafianto/lynx-api/internal/utils"
+	"github.com/marcelaritonang/website-urlshortener-lynx-backend/internal/interfaces"
+	"github.com/marcelaritonang/website-urlshortener-lynx-backend/internal/types"
+	"github.com/marcelaritonang/website-urlshortener-lynx-backend/internal/utils"
 )
 
 type QRHandler struct {

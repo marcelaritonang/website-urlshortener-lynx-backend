@@ -7,10 +7,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/naufalrafianto/lynx-api/internal/interfaces"
-	"github.com/naufalrafianto/lynx-api/internal/models"
-	"github.com/naufalrafianto/lynx-api/internal/types"
-	"github.com/naufalrafianto/lynx-api/internal/utils"
+	"github.com/marcelaritonang/website-urlshortener-lynx-backend/internal/interfaces"
+	"github.com/marcelaritonang/website-urlshortener-lynx-backend/internal/models"
+	"github.com/marcelaritonang/website-urlshortener-lynx-backend/internal/types"
+	"github.com/marcelaritonang/website-urlshortener-lynx-backend/internal/utils"
 )
 
 type URLHandler struct {
@@ -26,7 +26,7 @@ func NewURLHandler(urlService interfaces.URLService, baseURL string) *URLHandler
 	}
 }
 
-// CreateShortURL creates a short URL for a given long URL
+// CreateShortURL creates a short URL for a given long URL (authenticated users)
 func (h *URLHandler) CreateShortURL(c *gin.Context) {
 	var req models.CreateURLRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -42,6 +42,26 @@ func (h *URLHandler) CreateShortURL(c *gin.Context) {
 
 	ctx := c.Request.Context()
 	url, err := h.urlService.CreateShortURL(ctx, userID, req.LongURL, req.ShortCode)
+	if err != nil {
+		utils.HandleError(c, err)
+		return
+	}
+
+	utils.SuccessResponse(c, http.StatusCreated, "Short URL created successfully", url)
+}
+
+// ✅ NEW: CreateAnonymousURL creates a short URL without authentication
+func (h *URLHandler) CreateAnonymousURL(c *gin.Context) {
+	var req models.CreateURLRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, types.NewValidationError(err.Error()))
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// Create anonymous URL with default 7 days expiry (168 hours)
+	url, err := h.urlService.CreateAnonymousURL(ctx, req.LongURL, req.ShortCode, 168)
 	if err != nil {
 		utils.HandleError(c, err)
 		return
@@ -91,12 +111,14 @@ func (h *URLHandler) GetUserURLs(c *gin.Context) {
 		}
 	}
 
-	totalPages := (total + pagination.PerPage - 1) / pagination.PerPage
+	// ✅ FIX: Cast int to int64 untuk perhitungan
+	totalPages := (total + int64(pagination.PerPage) - 1) / int64(pagination.PerPage)
+
 	utils.PaginationResponse(c, http.StatusOK, "URLs retrieved successfully", urlResponses, utils.Meta{
 		Page:      pagination.Page,
 		PerPage:   pagination.PerPage,
-		Total:     total,
-		TotalPage: totalPages,
+		Total:     total,      // int64
+		TotalPage: totalPages, // int64
 	})
 }
 
@@ -160,7 +182,14 @@ func (h *URLHandler) DeleteURL(c *gin.Context) {
 // RedirectToLongURL redirects a short URL to the original long URL
 func (h *URLHandler) RedirectToLongURL(c *gin.Context) {
 	shortCode := c.Param("shortCode")
+
+	// ✅ ADD: Debug logs
+	fmt.Printf("🌐 [HANDLER] Redirect requested for: %s\n", shortCode)
+	fmt.Printf("🌐 [HANDLER] Full path: %s\n", c.Request.URL.Path)
+	fmt.Printf("🌐 [HANDLER] Method: %s\n", c.Request.Method)
+
 	if shortCode == "" {
+		fmt.Printf("❌ [HANDLER] Empty short code!\n")
 		utils.ErrorResponse(c, http.StatusBadRequest, types.ErrInvalidShortCode)
 		return
 	}
@@ -168,6 +197,7 @@ func (h *URLHandler) RedirectToLongURL(c *gin.Context) {
 	ctx := c.Request.Context()
 	longURL, err := h.urlService.GetLongURL(ctx, shortCode)
 	if err != nil {
+		fmt.Printf("❌ [HANDLER] Error getting long URL: %v\n", err)
 		switch err {
 		case types.ErrURLNotFound:
 			utils.ErrorResponse(c, http.StatusNotFound, err)
@@ -178,6 +208,8 @@ func (h *URLHandler) RedirectToLongURL(c *gin.Context) {
 		}
 		return
 	}
+
+	fmt.Printf("✅ [HANDLER] Redirecting to: %s\n", longURL)
 
 	utils.Logger.Info("Redirecting to URL",
 		"short_code", shortCode,

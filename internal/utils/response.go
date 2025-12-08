@@ -13,10 +13,10 @@ type Response struct {
 }
 
 type Meta struct {
-	Page      int `json:"page,omitempty"`
-	PerPage   int `json:"per_page,omitempty"`
-	Total     int `json:"total,omitempty"`
-	TotalPage int `json:"total_page,omitempty"`
+	Page      int   `json:"page"`
+	PerPage   int   `json:"per_page"`
+	Total     int64 `json:"total"`
+	TotalPage int64 `json:"total_page"`
 }
 
 type PaginationRequest struct {
