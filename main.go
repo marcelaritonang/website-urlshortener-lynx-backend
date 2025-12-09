@@ -253,10 +253,19 @@ func (a *App) initDatabase() (*gorm.DB, error) {
 	fmt.Println("DBPassword:", a.config.DBPassword)
 	fmt.Println("DBName:", a.config.DBName)
 
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable TimeZone=UTC",
-		a.config.DBHost, a.config.DBUser, a.config.DBPassword, a.config.DBName, a.config.DBPort)
+	// ✅ Render requires sslmode=require
+	sslMode := "disable"
+	if a.config.AppEnv == "production" {
+		sslMode = "require"
+	}
 
-	fmt.Println("DSN:", dsn)
+	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=%s TimeZone=UTC",
+		a.config.DBHost, a.config.DBUser, a.config.DBPassword, a.config.DBName, a.config.DBPort, sslMode)
+
+	// Don't print password in production
+	if a.config.AppEnv != "production" {
+		fmt.Println("DSN:", dsn)
+	}
 	fmt.Println("================================")
 
 	gormConfig := &gorm.Config{
