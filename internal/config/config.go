@@ -62,11 +62,9 @@ func LoadConfig() (*Config, error) {
 		SMTPFrom:     getEnv("SMTP_FROM_EMAIL", ""),
 	}
 
-	// ✅ Parse DATABASE_URL if exists (Render/Railway format)
+	// ✅ Parse DATABASE_URL if exists (Render format)
 	if databaseURL := os.Getenv("DATABASE_URL"); databaseURL != "" {
-		if err := parseDatabaseURL(databaseURL, cfg); err == nil {
-			// Successfully parsed DATABASE_URL
-		}
+		parseDatabaseURL(databaseURL, cfg)
 	}
 
 	// ✅ Parse REDIS_URL if exists
@@ -80,42 +78,36 @@ func LoadConfig() (*Config, error) {
 	return cfg, nil
 }
 
-// ✅ Helper function to parse DATABASE_URL
-func parseDatabaseURL(dbURL string, cfg *Config) error {
-	// Format: postgresql://user:pass@host:port/dbname
+// ✅ Parse DATABASE_URL helper
+func parseDatabaseURL(dbURL string, cfg *Config) {
 	dbURL = strings.TrimPrefix(dbURL, "postgresql://")
 	dbURL = strings.TrimPrefix(dbURL, "postgres://")
 
-	if !strings.Contains(dbURL, "@") {
-		return fmt.Errorf("invalid DATABASE_URL format")
+	if strings.Contains(dbURL, "@") {
+		parts := strings.SplitN(dbURL, "@", 2)
+		userPass := strings.SplitN(parts[0], ":", 2)
+		hostAndDb := strings.SplitN(parts[1], "/", 2)
+
+		cfg.DBUser = userPass[0]
+		if len(userPass) > 1 {
+			cfg.DBPassword = userPass[1]
+		}
+
+		hostPort := strings.SplitN(hostAndDb[0], ":", 2)
+		cfg.DBHost = hostPort[0]
+		cfg.DBPort = "5432"
+		if len(hostPort) > 1 {
+			cfg.DBPort = hostPort[1]
+		}
+
+		if len(hostAndDb) > 1 {
+			cfg.DBName = strings.SplitN(hostAndDb[1], "?", 2)[0]
+		}
 	}
-
-	parts := strings.SplitN(dbURL, "@", 2)
-	userPass := strings.SplitN(parts[0], ":", 2)
-	hostAndDb := strings.SplitN(parts[1], "/", 2)
-
-	cfg.DBUser = userPass[0]
-	if len(userPass) > 1 {
-		cfg.DBPassword = userPass[1]
-	}
-
-	hostPort := strings.SplitN(hostAndDb[0], ":", 2)
-	cfg.DBHost = hostPort[0]
-	cfg.DBPort = "5432"
-	if len(hostPort) > 1 {
-		cfg.DBPort = hostPort[1]
-	}
-
-	if len(hostAndDb) > 1 {
-		cfg.DBName = strings.SplitN(hostAndDb[1], "?", 2)[0]
-	}
-
-	return nil
 }
 
-// ✅ Helper function to parse REDIS_URL
+// ✅ Parse REDIS_URL helper
 func parseRedisURL(redisURL string, cfg *Config) {
-	// Format: redis://default:pass@host:port
 	redisURL = strings.TrimPrefix(redisURL, "redis://")
 
 	if strings.Contains(redisURL, "@") {
