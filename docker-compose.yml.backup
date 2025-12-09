@@ -1,0 +1,93 @@
+# HAPUS baris version, sudah obsolete di Docker Compose v2
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/app
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+    env_file:
+      - .env
+    environment:
+      - CGO_ENABLED=0
+      - GOOS=linux
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - lynx_network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s  # Ubah dari 10s ke 40s agar aplikasi punya waktu untuk start
+
+  postgres:
+    image: postgres:17-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - PGDATA=${PGDATA}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - lynx_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    # Ubah command untuk handle empty password
+    command: >
+      sh -c "
+      if [ -z \"$REDIS_PASSWORD\" ]; then
+        redis-server --maxmemory 256mb --maxmemory-policy ${REDIS_MAXMEMORY_POLICY}
+      else
+        redis-server --requirepass \"$REDIS_PASSWORD\" --maxmemory 256mb --maxmemory-policy ${REDIS_MAXMEMORY_POLICY}
+      fi
+      "
+    volumes:
+      - redis_data:/data
+    networks:
+      - lynx_network
+    healthcheck:
+      # Ubah healthcheck untuk handle empty password
+      test: >
+        sh -c "
+        if [ -z \"$REDIS_PASSWORD\" ]; then
+          redis-cli ping
+        else
+          redis-cli -a \"$REDIS_PASSWORD\" ping
+        fi
+        "
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  postgres_data:
+  redis_data:
+  go-mod-cache:
+  go-build-cache:
+
+networks:
+  lynx_network:
+    driver: bridge
