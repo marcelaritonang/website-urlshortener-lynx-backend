@@ -1,62 +1,11 @@
 # Binaries
 *.exe
-*.dll
-*.so
-*.dylib
 main
 
-# Test binary
-*.test
-
-# Output of the go coverage tool
-*.out
-
-# Dependency directories
-vendor/
-
-# Go workspace file
-go.work
-
-# Environment files
+# Environment
 .env
 .env.local
-.env.*.local
 
-# Keep templates (these should be committed)
-!.env.dev
-!.env.docker
-!.env.production
-
-# Docker
-docker-compose.yml.backup
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
-logs/
-
-# Database
-*.db
-*.sqlite
-
-# Temporary files
+# Development
+backups/
 tmp/
-temp/
-
-# API Documentation (auto-generated)
-API_DOCS.md
-API_DOCUMENTATION.md
-
-# Build
-dist/
-build/
