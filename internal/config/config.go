@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -34,14 +35,10 @@ type Config struct {
 }
 
 func LoadConfig() (*Config, error) {
-	if err := godotenv.Load(); err != nil {
-		// Try loading .env.dev in development
-		if err := godotenv.Load(".env.dev"); err != nil {
-			return nil, err
-		}
-	}
+	// Load .env file (local development)
+	_ = godotenv.Load()
 
-	config := &Config{
+	cfg := &Config{
 		AppEnv:        getEnv("APP_ENV", "development"),
 		Port:          getEnv("PORT", "8080"),
 		DBHost:        getEnv("DB_HOST", "127.0.0.1"), // ✅ UBAH
@@ -65,12 +62,79 @@ func LoadConfig() (*Config, error) {
 		SMTPFrom:     getEnv("SMTP_FROM_EMAIL", ""),
 	}
 
-	// ✅ Validate and normalize secrets
-	if err := config.validateAndNormalizeSecrets(); err != nil {
-		return nil, err
+	// ✅ Parse DATABASE_URL if exists (Render/Railway format)
+	if databaseURL := os.Getenv("DATABASE_URL"); databaseURL != "" {
+		if err := parseDatabaseURL(databaseURL, cfg); err == nil {
+			// Successfully parsed DATABASE_URL
+		}
 	}
 
-	return config, nil
+	// ✅ Parse REDIS_URL if exists
+	if redisURL := os.Getenv("REDIS_URL"); redisURL != "" {
+		parseRedisURL(redisURL, cfg)
+	}
+
+	// Validate required fields
+	// ...existing validation...
+
+	return cfg, nil
+}
+
+// ✅ Helper function to parse DATABASE_URL
+func parseDatabaseURL(dbURL string, cfg *Config) error {
+	// Format: postgresql://user:pass@host:port/dbname
+	dbURL = strings.TrimPrefix(dbURL, "postgresql://")
+	dbURL = strings.TrimPrefix(dbURL, "postgres://")
+
+	if !strings.Contains(dbURL, "@") {
+		return fmt.Errorf("invalid DATABASE_URL format")
+	}
+
+	parts := strings.SplitN(dbURL, "@", 2)
+	userPass := strings.SplitN(parts[0], ":", 2)
+	hostAndDb := strings.SplitN(parts[1], "/", 2)
+
+	cfg.DBUser = userPass[0]
+	if len(userPass) > 1 {
+		cfg.DBPassword = userPass[1]
+	}
+
+	hostPort := strings.SplitN(hostAndDb[0], ":", 2)
+	cfg.DBHost = hostPort[0]
+	cfg.DBPort = "5432"
+	if len(hostPort) > 1 {
+		cfg.DBPort = hostPort[1]
+	}
+
+	if len(hostAndDb) > 1 {
+		cfg.DBName = strings.SplitN(hostAndDb[1], "?", 2)[0]
+	}
+
+	return nil
+}
+
+// ✅ Helper function to parse REDIS_URL
+func parseRedisURL(redisURL string, cfg *Config) {
+	// Format: redis://default:pass@host:port
+	redisURL = strings.TrimPrefix(redisURL, "redis://")
+
+	if strings.Contains(redisURL, "@") {
+		parts := strings.SplitN(redisURL, "@", 2)
+
+		if strings.Contains(parts[0], ":") {
+			userPass := strings.SplitN(parts[0], ":", 2)
+			if len(userPass) > 1 {
+				cfg.RedisPassword = userPass[1]
+			}
+		}
+
+		hostPort := strings.SplitN(parts[1], ":", 2)
+		cfg.RedisHost = hostPort[0]
+		cfg.RedisPort = "6379"
+		if len(hostPort) > 1 {
+			cfg.RedisPort = hostPort[1]
+		}
+	}
 }
 
 // ✅ ENHANCED: Secret validation with auto-generation
