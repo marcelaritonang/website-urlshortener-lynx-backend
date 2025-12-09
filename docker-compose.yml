@@ -1,48 +1,44 @@
+version: '3.8'
+
 services:
-  postgres:
+  lynx-postgres:
     image: postgres:17-alpine
     container_name: lynx-postgres
     restart: unless-stopped
+    environment:
+      POSTGRES_USER: lynx_user
+      POSTGRES_PASSWORD: lynx_password_123
+      POSTGRES_DB: lynx_db
+      PGDATA: /var/lib/postgresql/data/pgdata
     ports:
       - "5432:5432"
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-      PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    networks:
-      - lynx_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U lynx_user -d lynx_db"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 10s
+      start_period: 30s
 
-  redis:
+  lynx-redis:
     image: redis:7-alpine
     container_name: lynx-redis
     restart: unless-stopped
     ports:
       - "6379:6379"
-    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
-    networks:
-      - lynx_network
+    command: redis-server --appendonly yes
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
-      timeout: 5s
+      timeout: 3s
       retries: 5
-      start_period: 5s
+      start_period: 10s
 
 volumes:
   postgres_data:
+    driver: local
   redis_data:
-
-networks:
-  lynx_network:
-    driver: bridge
+    driver: local

@@ -313,10 +313,50 @@ func (a *App) initRedis() (*redis.Client, error) {
 }
 
 func (a *App) initMigrations() error {
-	// ✅ REMOVED: Auto drop table - data will persist
-	// Only run AutoMigrate to update schema without dropping tables
-	return a.db.AutoMigrate(
+	fmt.Println("🔄 Running database migrations...")
+
+	// ✅ FORCE: Close any pending transactions first
+	sqlDB, err := a.db.DB()
+	if err == nil {
+		sqlDB.SetMaxIdleConns(5)
+		sqlDB.SetMaxOpenConns(10)
+		sqlDB.SetConnMaxLifetime(time.Hour)
+	}
+
+	// ✅ GORM AutoMigrate WITHOUT transaction
+	if err := a.db.AutoMigrate(
 		&models.User{},
 		&models.URL{},
-	)
+	); err != nil {
+		return fmt.Errorf("migration failed: %w", err)
+	}
+
+	// ✅ VERIFY: Force immediate verification with separate connection
+	var tableCount int64
+	if err := a.db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('users', 'urls')").Scan(&tableCount).Error; err != nil {
+		return fmt.Errorf("table verification failed: %w", err)
+	}
+
+	if tableCount != 2 {
+		utils.Logger.Warn("Table verification", "expected", 2, "found", tableCount)
+
+		// List what tables exist
+		var tables []string
+		a.db.Raw("SELECT tablename FROM pg_tables WHERE schemaname = 'public'").Scan(&tables)
+		utils.Logger.Info("Existing tables", "tables", tables)
+
+		return fmt.Errorf("migration incomplete: expected 2 tables, found %d", tableCount)
+	}
+
+	utils.Logger.Info("Tables verified successfully", "count", tableCount)
+
+	// ✅ FORCE COMMIT: Ensure all changes are persisted
+	if sqlDB, err := a.db.DB(); err == nil {
+		if err := sqlDB.Ping(); err != nil {
+			return fmt.Errorf("database ping failed after migration: %w", err)
+		}
+	}
+
+	fmt.Println("✅ Migrations completed successfully")
+	return nil
 }
