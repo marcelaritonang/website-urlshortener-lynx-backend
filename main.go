@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -37,6 +38,21 @@ func main() {
 	if err := app.Initialize(); err != nil {
 		log.Fatal("Failed to initialize application:", err)
 	}
+
+	// PENTING: Baca PORT dari environment variable (override config jika ada)
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = app.config.Port
+	}
+	app.config.Port = port
+
+	// Baca DATABASE_URL dari environment (sudah di-handle di config.go)
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL != "" {
+		log.Printf("DATABASE_URL: %s", dbURL)
+	}
+
+	log.Printf("Starting server on port %s", port)
 	app.Run()
 }
 
@@ -85,8 +101,8 @@ func (a *App) Initialize() error {
 
 func (a *App) Run() {
 	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%s", a.config.Port),
-		Handler: a.router,
+		Addr:    ":" + a.config.Port,
+		Handler: a.router, // TIDAK PERLU WRAP DENGAN rs/cors
 	}
 
 	// Graceful shutdown setup
@@ -131,7 +147,19 @@ func (a *App) setupRouter() *gin.Engine {
 	// Middlewares
 	router.Use(gin.Recovery())
 	router.Use(utils.NewLoggerMiddleware(utils.Logger).Handle())
-	router.Use(cors.New(a.corsConfig()))
+	// GUNAKAN GIN CORS DENGAN DOMAIN VERCEL DAN LOCALHOST
+	router.Use(cors.New(cors.Config{
+		AllowOrigins: []string{
+			"https://shorteny.my.id",
+			"http://localhost:3000",
+			"https://shorteny_vercel.app", // tambahkan ini!
+		},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
 
 	// ✅ NEW: Global rate limiting (100 requests/min per IP)
 	router.Use(middleware.RateLimiterMiddleware(a.redis, middleware.RateLimiterConfig{
@@ -218,17 +246,6 @@ func (a *App) setupRouter() *gin.Engine {
 	router.NoRoute(a.notFound())
 
 	return router
-}
-
-func (a *App) corsConfig() cors.Config {
-	return cors.Config{
-		AllowOrigins:     []string{"*"},
-		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Request-ID"},
-		ExposeHeaders:    []string{"Content-Length", "Content-Type"},
-		AllowCredentials: true,
-		MaxAge:           12 * time.Hour,
-	}
 }
 
 func (a *App) healthCheck() gin.HandlerFunc {

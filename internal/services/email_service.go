@@ -52,6 +52,10 @@ func (s *EmailService) SendResetPasswordEmail(toEmail, toName, resetToken string
 	subject := "Reset Password - Shorteny"
 	body := s.buildEmailHTML(toName, resetLink)
 
+	// ✅ DEBUG: Print SMTP config for troubleshooting
+	fmt.Printf("[DEBUG] SMTP_HOST=%s SMTP_PORT=%s SMTP_USERNAME=%s SMTP_FROM=%s FRONTEND_URL=%s\n",
+		s.smtpHost, s.smtpPort, s.smtpUsername, s.fromEmail, s.frontendURL)
+
 	return s.sendEmail(toEmail, subject, body)
 }
 
@@ -166,9 +170,13 @@ func (s *EmailService) sendEmail(to, subject, body string) error {
 	// Send email with proper error handling
 	addr := fmt.Sprintf("%s:%s", s.smtpHost, s.smtpPort)
 
+	// ✅ DEBUG: Print SMTP address and auth info
+	fmt.Printf("[DEBUG] SMTP_ADDR=%s FROM=%s TO=%s USER=%s\n", addr, s.fromEmail, to, s.smtpUsername)
+
 	err := smtp.SendMail(addr, auth, s.fromEmail, []string{to}, msg)
 	if err != nil {
 		// ✅ Enhanced error message with troubleshooting hints
+		fmt.Printf("[ERROR] SMTP send failed: %v\n", err)
 		return fmt.Errorf("SMTP send failed (check credentials and network): %w", err)
 	}
 
