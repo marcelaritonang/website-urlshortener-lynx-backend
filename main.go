@@ -152,7 +152,7 @@ func (a *App) setupRouter() *gin.Engine {
 		AllowOrigins: []string{
 			"https://shorteny.my.id",
 			"http://localhost:3000",
-			"https://shorteny_vercel.app", // tambahkan ini!
+			"https://shorteny.vercel.app/", // tambahkan ini!
 		},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
