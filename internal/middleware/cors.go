@@ -14,6 +14,7 @@ func CORSMiddleware() gin.HandlerFunc {
 			"https://shorteny.my.id":      true,
 			"http://localhost:3000":       true,
 			"http://localhost:3001":       true,
+			"https://www.shorteny.site/":  true,
 		}
 
 		// Set CORS headers if origin is allowed
