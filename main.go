@@ -11,7 +11,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
 	"github.com/marcelaritonang/website-urlshortener-lynx-backend/internal/config"
@@ -102,7 +101,7 @@ func (a *App) Initialize() error {
 func (a *App) Run() {
 	srv := &http.Server{
 		Addr:    ":" + a.config.Port,
-		Handler: a.router, // TIDAK PERLU WRAP DENGAN rs/cors
+		Handler: a.router,
 	}
 
 	// Graceful shutdown setup
@@ -144,24 +143,14 @@ func (a *App) setupRouter() *gin.Engine {
 
 	router := gin.New()
 
-	// Middlewares
+	// ============================================================
+	// CRITICAL: CUSTOM CORS MIDDLEWARE MUST BE FIRST!
+	// ============================================================
+	router.Use(middleware.CORSMiddleware())
+
+	// Middleware lain SETELAH CORS
 	router.Use(gin.Recovery())
 	router.Use(utils.NewLoggerMiddleware(utils.Logger).Handle())
-	// GUNAKAN GIN CORS DENGAN DOMAIN VERCEL DAN LOCALHOST
-	router.Use(cors.New(cors.Config{
-		AllowOrigins: []string{
-			"https://shorteny.my.id",
-			"http://localhost:3000",
-			"https://shorteny.vercel.app/", // tambahkan ini!
-		},
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
-		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: true,
-		MaxAge:           12 * time.Hour,
-	}))
-
-	// ✅ NEW: Global rate limiting (100 requests/min per IP)
 	router.Use(middleware.RateLimiterMiddleware(a.redis, middleware.RateLimiterConfig{
 		RequestsPerMinute: 100,
 		BurstSize:         20,
@@ -184,17 +173,21 @@ func (a *App) setupRouter() *gin.Engine {
 	urlHandler := handlers.NewURLHandler(urlService, baseURL)
 	qrHandler := handlers.NewQRHandler(qrService, urlService)
 
+	// ============================================================
+	// PUBLIC ROUTES (No Authentication)
+	// ============================================================
+
 	// Health check
 	router.GET("/health", a.healthCheck())
 
-	// Public routes (no authentication)
+	// QR Code generation
 	router.GET("/qr/:shortCode", qrHandler.GetQRCode)
 	router.GET("/qr/:shortCode/base64", qrHandler.GetQRCodeBase64)
-	router.GET("/urls/:shortCode", urlHandler.RedirectToLongURL) // ✅ Critical route
+
+	// URL Redirect
+	router.GET("/urls/:shortCode", urlHandler.RedirectToLongURL)
 
 	fmt.Println("✅ [ROUTER] Redirect route registered: GET /urls/:shortCode")
-
-	// ✅ ADD: Debug log for route registration
 	fmt.Println("🔧 [ROUTER] Registering public routes...")
 
 	// Public API routes (no authentication required)
@@ -203,21 +196,20 @@ func (a *App) setupRouter() *gin.Engine {
 		publicAPI.POST("/urls", urlHandler.CreateAnonymousURL)
 	}
 
-	// API v1 routes
+	// ============================================================
+	// API v1 ROUTES
+	// ============================================================
 	v1 := router.Group("/v1")
 	{
-		// ✅ Auth routes (public) - WITH STRICT RATE LIMITING
+		// Auth routes (public) - WITH STRICT RATE LIMITING
 		auth := v1.Group("/auth")
-		auth.Use(middleware.AuthRateLimiterMiddleware(a.redis)) // 5 attempts per 15 min
+		auth.Use(middleware.AuthRateLimiterMiddleware(a.redis))
 		{
 			auth.POST("/register", authHandler.Register)
 			auth.POST("/login", authHandler.Login)
-
-			// ✅ Forgot password with additional email-based rate limit
 			auth.POST("/forgot-password",
 				middleware.ForgotPasswordRateLimiter(a.redis),
 				authHandler.ForgotPassword)
-
 			auth.POST("/reset-password", authHandler.ResetPasswordConfirm)
 		}
 
@@ -243,6 +235,7 @@ func (a *App) setupRouter() *gin.Engine {
 		}
 	}
 
+	// 404 handler
 	router.NoRoute(a.notFound())
 
 	return router
@@ -307,8 +300,8 @@ func (a *App) initRedis() (*redis.Client, error) {
 		DialTimeout:  5 * time.Second,
 		ReadTimeout:  3 * time.Second,
 		WriteTimeout: 3 * time.Second,
-		PoolSize:     10, // ✅ ADD: Connection pool
-		MinIdleConns: 5,  // ✅ ADD: Minimum idle connections
+		PoolSize:     10,
+		MinIdleConns: 5,
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -341,7 +334,7 @@ func (a *App) initRedis() (*redis.Client, error) {
 func (a *App) initMigrations() error {
 	fmt.Println("🔄 Running database migrations...")
 
-	// ✅ FORCE: Close any pending transactions first
+	// ✅ Configure connection pool
 	sqlDB, err := a.db.DB()
 	if err == nil {
 		sqlDB.SetMaxIdleConns(5)
@@ -349,7 +342,7 @@ func (a *App) initMigrations() error {
 		sqlDB.SetConnMaxLifetime(time.Hour)
 	}
 
-	// ✅ GORM AutoMigrate WITHOUT transaction
+	// ✅ Run migrations
 	if err := a.db.AutoMigrate(
 		&models.User{},
 		&models.URL{},
@@ -357,7 +350,7 @@ func (a *App) initMigrations() error {
 		return fmt.Errorf("migration failed: %w", err)
 	}
 
-	// ✅ VERIFY: Force immediate verification with separate connection
+	// ✅ Verify tables exist
 	var tableCount int64
 	if err := a.db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('users', 'urls')").Scan(&tableCount).Error; err != nil {
 		return fmt.Errorf("table verification failed: %w", err)
@@ -366,7 +359,7 @@ func (a *App) initMigrations() error {
 	if tableCount != 2 {
 		utils.Logger.Warn("Table verification", "expected", 2, "found", tableCount)
 
-		// List what tables exist
+		// List existing tables
 		var tables []string
 		a.db.Raw("SELECT tablename FROM pg_tables WHERE schemaname = 'public'").Scan(&tables)
 		utils.Logger.Info("Existing tables", "tables", tables)
@@ -376,7 +369,7 @@ func (a *App) initMigrations() error {
 
 	utils.Logger.Info("Tables verified successfully", "count", tableCount)
 
-	// ✅ FORCE COMMIT: Ensure all changes are persisted
+	// ✅ Test database connection
 	if sqlDB, err := a.db.DB(); err == nil {
 		if err := sqlDB.Ping(); err != nil {
 			return fmt.Errorf("database ping failed after migration: %w", err)
