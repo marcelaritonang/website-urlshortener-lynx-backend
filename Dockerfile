@@ -26,7 +26,7 @@ CMD ["air", "-c", ".air.toml"]
 FROM base AS builder
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o main ./cmd/api
+RUN CGO_ENABLED=0 GOOS=linux go build -o main .
 
 # Production stage
 FROM alpine:3.18 AS production
@@ -36,6 +36,5 @@ RUN apk --no-cache add ca-certificates tzdata
 WORKDIR /app
 
 COPY --from=builder /app/main .
-
 
 CMD ["./main"]

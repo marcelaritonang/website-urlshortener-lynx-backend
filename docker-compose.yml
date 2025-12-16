@@ -5,40 +5,70 @@ services:
     image: postgres:17-alpine
     container_name: lynx-postgres
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
-      POSTGRES_USER: lynx_user
-      POSTGRES_PASSWORD: lynx_password_123
-      POSTGRES_DB: lynx_db
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
       PGDATA: /var/lib/postgresql/data/pgdata
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U lynx_user -d lynx_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
+    networks:
+      - lynx-network
 
   lynx-redis:
     image: redis:7-alpine
     container_name: lynx-redis
     restart: unless-stopped
+    env_file:
+      - .env
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
       start_period: 10s
+    networks:
+      - lynx-network
+
+  lynx-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lynx-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8080:8080"
+    depends_on:
+      lynx-postgres:
+        condition: service_healthy
+      lynx-redis:
+        condition: service_healthy
+    networks:
+      - lynx-network
 
 volumes:
   postgres_data:
     driver: local
   redis_data:
     driver: local
+
+networks:
+  lynx-network:
+    driver: bridge
