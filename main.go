@@ -158,18 +158,23 @@ func (a *App) setupRouter() *gin.Engine {
 		BlockDuration:     30 * time.Minute,
 	}))
 
-	// Determine base URL
 	baseURL := a.config.BaseURL
 	if baseURL == "" {
 		baseURL = fmt.Sprintf("http://%s:%s", a.config.Host, a.config.Port)
 	}
 
-	baseURL = strings.TrimSuffix(baseURL, "/")
+	// DON'T trim trailing slash for QR service!
+	// baseURL = strings.TrimSuffix(baseURL, "/") ← HAPUS INI
+
+	// ✅ Ensure baseURL has trailing slash for QR service
+	if !strings.HasSuffix(baseURL, "/") {
+		baseURL += "/"
+	}
+
 	// ✅ Initialize services with interfaces
 	var authService interfaces.AuthService = services.NewAuthService(a.db, a.redis)
 	var urlService interfaces.URLService = services.NewURLService(a.db, a.redis, a.config.URLPrefix)
-	var qrService interfaces.QRService = services.NewQRService(a.db, a.redis, baseURL)
-
+	var qrService interfaces.QRService = services.NewQRService(a.db, a.redis, a.config.URLPrefix)
 	// ✅ Initialize handlers
 	authHandler := handlers.NewAuthHandler(authService, a.config.JWTSecret, a.db)
 	urlHandler := handlers.NewURLHandler(urlService, baseURL)
