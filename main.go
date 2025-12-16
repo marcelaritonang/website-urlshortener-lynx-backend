@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -158,11 +159,12 @@ func (a *App) setupRouter() *gin.Engine {
 	}))
 
 	// Determine base URL
-	baseURL := fmt.Sprintf("http://%s:%s", a.config.Host, a.config.Port)
-	if a.config.AppEnv == "production" && a.config.BaseURL != "" {
-		baseURL = a.config.BaseURL
+	baseURL := a.config.BaseURL
+	if baseURL == "" {
+		baseURL = fmt.Sprintf("http://%s:%s", a.config.Host, a.config.Port)
 	}
 
+	baseURL = strings.TrimSuffix(baseURL, "/")
 	// ✅ Initialize services with interfaces
 	var authService interfaces.AuthService = services.NewAuthService(a.db, a.redis)
 	var urlService interfaces.URLService = services.NewURLService(a.db, a.redis, a.config.URLPrefix)
