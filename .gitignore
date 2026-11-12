@@ -9,3 +9,6 @@ main
 # Development
 backups/
 tmp/
+.env.*
+!.env.example
+!*.example
